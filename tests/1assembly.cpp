@@ -64,6 +64,5 @@ TEST(assembly_test, base_jit_mov) {
   addUint32_t(assemblies, p);
   auto fun = createJit(assemblies);
   uint32_t result = fun();
-  std::cout << std::dec << (uint32_t)result << std::endl;
-  ASSERT_EQ(42, callAssembly([]()->int{return 42;}));
+  ASSERT_EQ(42, fun());
 }
