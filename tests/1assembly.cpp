@@ -39,12 +39,6 @@ TEST(assembly_test, base_jit_mov) {
   64-bit variant
     Applies when sf == 1.
   */
-  uint32_t mov = 0b10100101 << 23;
-  
-  mov |= (42);
-
-  return42();
-
   std::vector<uint8_t> assemblies;
   /// @brief OPCode MOV IMM16
   /// -> 0b10100101 是mov IMM16的opcode
