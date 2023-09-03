@@ -11,8 +11,8 @@ int return42(int a){
   return a + 42;
 }
 
-int test() {
-  return return42(21);
+void test() {
+  std::cout << "Hello JIT\n";
 }
 
 TEST(assembly_test, base_lambda) {
@@ -75,7 +75,7 @@ uint32_t immNeg(uint32_t positive, uint32_t length){
   return positive;
 }
 
-TEST(assembly_test, base_jit_store_add) {
+TEST(assembly_test, base_jit_call) {
   // 函数栈帧的保存
   /// @brief https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/STP--Store-Pair-of-Registers-
   // stp x29, x30, [sp, #-16]!  <- 0xa9bf7bfd
@@ -92,6 +92,15 @@ TEST(assembly_test, base_jit_store_add) {
   stp_x29_x30 |= (30 << 10); // RT2
   stp_x29_x30 |= (31 << 5); // RN sp = X31
   stp_x29_x30 |= (29); // RT
+
+  /// call (mov pc, ptr)
+  /// IMM16:hw的计算方式: ~(IMM16 << hw )
+  uintptr_t ptr = (uintptr_t)test;
+  std::cout << std::hex << ptr << std::endl;
+
+  uint32_t movPtr = 0b100100101;
+
+  /// @brief LDP 
   uint32_t LDP_X29_X30 = 0b1010100011 << 22;
   LDP_X29_X30 |= (((16 / 8) & 0b1111111) << 15); // IMM7
   LDP_X29_X30 |= (30 << 10); // RT2
