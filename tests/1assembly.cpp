@@ -7,8 +7,12 @@ int callAssembly(std::function<int()> fun){
   return fun();
 }
 
-int return42(){
-  return 42;
+int return42(int a){
+  return a + 42;
+}
+
+int test() {
+  return return42(21);
 }
 
 TEST(assembly_test, base_lambda) {
@@ -60,3 +64,41 @@ TEST(assembly_test, base_jit_mov) {
   uint32_t result = fun();
   ASSERT_EQ(42, fun());
 }
+
+uint32_t immNeg(uint32_t positive, uint32_t length){
+  positive = ~positive;
+  uint32_t mask = 0;
+  for(int i = 0; i < length; ++i) {
+    mask = (mask | (1 << i));
+  }
+  positive &= mask;
+  return positive;
+}
+
+TEST(assembly_test, base_jit_store_add) {
+  // 函数栈帧的保存
+  /// @brief https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/STP--Store-Pair-of-Registers-
+  // stp x29, x30, [sp, #-16]!  <- 0xa9bf7bfd
+  uint32_t stp_x29_x30 = 0b101010011 << 23;
+  uint32_t neg = immNeg(16, 7);
+  
+  /// 关于IMM7的文档：
+  // <imm>	
+  // For the 32-bit post-index and 32-bit pre-index variant: is the signed immediate byte offset, a multiple of 4 in the range -256 to 252, encoded in the "imm7" field as <imm>/4.
+  // For the 32-bit signed offset variant: is the optional signed immediate byte offset, a multiple of 4 in the range -256 to 252, defaulting to 0 and encoded in the "imm7" field as <imm>/4.
+  // For the 64-bit post-index and 64-bit pre-index variant: is the signed immediate byte offset, a multiple of 8 in the range -512 to 504, encoded in the "imm7" field as <imm>/8.
+  // For the 64-bit signed offset variant: is the optional signed immediate byte offset, a multiple of 8 in the range -512 to 504, defaulting to 0 and encoded in the "imm7" field as <imm>/8.
+  stp_x29_x30 |= (((-16 / 8) & 0b1111111) << 15); // IMM7
+  stp_x29_x30 |= (30 << 10); // RT2
+  stp_x29_x30 |= (31 << 5); // RN sp = X31
+  stp_x29_x30 |= (29); // RT
+  uint32_t LDP_X29_X30 = 0b1010100011 << 22;
+  LDP_X29_X30 |= (((16 / 8) & 0b1111111) << 15); // IMM7
+  LDP_X29_X30 |= (30 << 10); // RT2
+  LDP_X29_X30 |= (31 << 5); // RN sp = X31
+  LDP_X29_X30 |= (29); // RT
+  std::cout << std::hex << stp_x29_x30 << "-" << LDP_X29_X30 << std::endl;
+  // ...call
+  // ldp x29, x30, [sp], #16    <- 0xa8c17bfd
+  test();
+ }
