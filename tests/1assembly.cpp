@@ -3,6 +3,8 @@
 #include <vector>
 #include <sys/mman.h>
 #include <cstring>
+#include "../src/Assembly.hpp"
+
 int callAssembly(std::function<int()> fun){
   return fun();
 }
@@ -38,12 +40,14 @@ std::function<uint64_t()> createJit64(const std::vector<uint8_t>& executable){
   return (uint64_t(*)())jitPtr;
 }
 
-void addUint32_t(std::vector<uint8_t>& executable, uint32_t value){
-  executable.push_back(value & 0xff);
-  executable.push_back((value >> (sizeof(uint8_t) * 8)) & 0xff);
-  executable.push_back((value >> ((2*sizeof(uint8_t)) * 8)) & 0xff);
-  executable.push_back((value >> ((3*sizeof(uint8_t)) * 8)) & 0xff);
+std::function<void()> createJitVoid(const std::vector<uint8_t>& executable){
+  void *jitPtr = mmap(nullptr, 4096, PROT_READ | PROT_EXEC | PROT_WRITE,
+                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  std::memcpy(jitPtr, executable.data(), executable.size());
+  return (void(*)())jitPtr;
 }
+
+
 
 
 /// @brief https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/MOV--wide-immediate---Move--wide-immediate---an-alias-of-MOVZ-?lang=en
@@ -126,7 +130,7 @@ TEST(assembly_test, base_jit_mov_8877665544332211) {
   mov_x0_8877 |= (0x8877 << 5);
   mov_x0_8877 |= (3 << 21);
 
-  uint32_t ret = 0xD65F0000 | (30 << 5);;
+  uint32_t ret = 0xD65F0000 | (30 << 5);
 
   /// @brief LDP 
   uint32_t LDP_X29_X30 = 0b1010100011 << 22;
@@ -146,5 +150,43 @@ TEST(assembly_test, base_jit_mov_8877665544332211) {
    addUint32_t(assemblies, LDP_X29_X30);
    addUint32_t(assemblies, ret);
    auto fun = createJit64(assemblies);
-   std::cout << "jit result = " << std::hex << fun() << std::endl;
+   ASSERT_EQ(0x8877665544332211, fun());
+ }
+
+
+ TEST(assembly_test, base_jit_call_native) { 
+
+  std::vector<uint8_t> assemblies;
+
+  uint32_t stp_x29_x30 = 0b101010011 << 23;
+  stp_x29_x30 |= (0x2211 << 5);
+  stp_x29_x30 |= (((-16 / 8) & 0b1111111) << 15); // IMM7
+  stp_x29_x30 |= (30 << 10); // RT2
+  stp_x29_x30 |= (31 << 5); // RN sp = X31
+  stp_x29_x30 |= (29); // RT
+  addUint32_t(assemblies, stp_x29_x30);
+
+
+  void* printFun = (void*) test;
+  auto functionToReg = insertPtrToRegister(1, printFun);
+  for(auto code : functionToReg) {
+    assemblies.push_back(code);
+  }
+
+  /// @brief BLR: https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/BLR--Branch-with-Link-to-Register-?lang=en 
+  uint32_t call_x1 = 0b1101011000111111000000 << 10;
+  call_x1 |= (1 << 5); // register << 5
+  addUint32_t(assemblies, call_x1);
+
+  uint32_t LDP_X29_X30 = 0b1010100011 << 22;
+  LDP_X29_X30 |= (((16 / 8) & 0b1111111) << 15); // IMM7
+  LDP_X29_X30 |= (30 << 10); // RT2
+  LDP_X29_X30 |= (31 << 5); // RN sp = X31
+  LDP_X29_X30 |= (29); // RT
+  uint32_t ret = 0xD65F0000 | (30 << 5);
+  addUint32_t(assemblies, LDP_X29_X30);
+  addUint32_t(assemblies, ret);
+
+  auto fun = createJitVoid(assemblies);
+  fun();
  }

@@ -1,5 +1,11 @@
 find_package(GTest REQUIRED)
-file(GLOB test_sources CONFIGURE_DEPENDS ./*.cpp)
+file(GLOB 
+test_sources 
+CONFIGURE_DEPENDS 
+./*.cpp
+../src/*.cpp
+../src/*.hpp)
+
 add_executable(
   armv8_a_study_test
   ${test_sources}
