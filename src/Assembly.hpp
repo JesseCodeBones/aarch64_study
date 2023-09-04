@@ -29,6 +29,7 @@ static std::vector<uint8_t> insertPtrToRegister(const uint8_t registerIndex, voi
   mov_x_6 |= (2 << 21);
   uint32_t mov_x_8 = 0b111100101 << 23;
   mov_x_8 |= (((value >> 48) & 0xffff) << 5);
+  mov_x_8 |= registerIndex;
   mov_x_8 |= (3 << 21);
   addUint32_t(asms, mov_x_2);
   addUint32_t(asms, mov_x_4);
