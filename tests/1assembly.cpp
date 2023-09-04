@@ -111,6 +111,7 @@ TEST(assembly_test, base_jit_mov_8877665544332211) {
   /// @brief mov 0x8877665544332211 to X0
   uint32_t mov_x0_2211 = 0b10100101 << 23;
   mov_x0_2211 |= (0x2211 << 5);
+  /// MOVK Document: https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/MOVK--Move-wide-with-keep-?lang=en
   uint32_t mov_x0_4433 = 0b111100101 << 23;
   mov_x0_4433 |= (0x4433 << 5);
   // hw移位定义
@@ -133,8 +134,6 @@ TEST(assembly_test, base_jit_mov_8877665544332211) {
   LDP_X29_X30 |= (30 << 10); // RT2
   LDP_X29_X30 |= (31 << 5); // RN sp = X31
   LDP_X29_X30 |= (29); // RT
-  std::cout << std::hex << stp_x29_x30 << "-" << LDP_X29_X30 << std::endl;
-  // ...call
   // ldp x29, x30, [sp], #16    <- 0xa8c17bfd
 
   // create JIT function
