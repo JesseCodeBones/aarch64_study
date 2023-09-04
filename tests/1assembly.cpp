@@ -7,12 +7,17 @@ int callAssembly(std::function<int()> fun){
   return fun();
 }
 
-int return42(int a){
-  return a + 42;
-}
 
 void test() {
-  std::cout << "Hello JIT\n";
+  std::cout << "hello JIT\n";
+}
+
+uint64_t mov64_x0(){
+  asm("mov X0, #0x2211");
+  asm("movk X0, #0x4433, lsl #0x10");
+  asm("movk X0, #0x6655, lsl #0x20");
+  asm("movk X0, #0x8877, lsl #0x30");
+  asm("ret");
 }
 
 TEST(assembly_test, base_lambda) {
@@ -24,6 +29,13 @@ std::function<int()> createJit(const std::vector<uint8_t>& executable){
                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   std::memcpy(jitPtr, executable.data(), executable.size());
   return (int(*)())jitPtr;
+}
+
+std::function<uint64_t()> createJit64(const std::vector<uint8_t>& executable){
+  void *jitPtr = mmap(nullptr, 4096, PROT_READ | PROT_EXEC | PROT_WRITE,
+                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  std::memcpy(jitPtr, executable.data(), executable.size());
+  return (uint64_t(*)())jitPtr;
 }
 
 void addUint32_t(std::vector<uint8_t>& executable, uint32_t value){
@@ -65,22 +77,18 @@ TEST(assembly_test, base_jit_mov) {
   ASSERT_EQ(42, fun());
 }
 
-uint32_t immNeg(uint32_t positive, uint32_t length){
-  positive = ~positive;
-  uint32_t mask = 0;
-  for(int i = 0; i < length; ++i) {
-    mask = (mask | (1 << i));
-  }
-  positive &= mask;
-  return positive;
-}
-
-TEST(assembly_test, base_jit_call) {
+TEST(assembly_test, base_jit_mov_8877665544332211) {
   // 函数栈帧的保存
   /// @brief https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/STP--Store-Pair-of-Registers-
   // stp x29, x30, [sp, #-16]!  <- 0xa9bf7bfd
   uint32_t stp_x29_x30 = 0b101010011 << 23;
-  uint32_t neg = immNeg(16, 7);
+  stp_x29_x30 |= (0x2211 << 5);
+
+
+  /// @brief 特殊用途寄存器编号
+  // X29 FP
+  // X30 LR RET
+  // X31 SP
   
   /// 关于IMM7的文档：
   // <imm>	
@@ -96,9 +104,28 @@ TEST(assembly_test, base_jit_call) {
   /// call (mov pc, ptr)
   /// IMM16:hw的计算方式: ~(IMM16 << hw )
   uintptr_t ptr = (uintptr_t)test;
-  std::cout << std::hex << ptr << std::endl;
+  // std::cout << std::hex << ptr << std::endl;
+  // uint64_t val = mov64_x0();
+  // std::cout << "value=" << std::hex << val << std::endl;
 
-  uint32_t movPtr = 0b100100101;
+  /// @brief mov 0x8877665544332211 to X0
+  uint32_t mov_x0_2211 = 0b10100101 << 23;
+  mov_x0_2211 |= (0x2211 << 5);
+  uint32_t mov_x0_4433 = 0b111100101 << 23;
+  mov_x0_4433 |= (0x4433 << 5);
+  // hw移位定义
+  //   <shift>	
+  // For the 32-bit variant: is the amount by which to shift the immediate left, either 0 (the default) or 16, encoded in the "hw" field as <shift>/16.
+  // For the 64-bit variant: is the amount by which to shift the immediate left, either 0 (the default), 16, 32 or 48, encoded in the "hw" field as <shift>/16.
+  mov_x0_4433 |= (1 << 21);
+  uint32_t mov_x0_6655 = 0b111100101 << 23;
+  mov_x0_6655 |= (0x6655 << 5);
+  mov_x0_6655 |= (2 << 21);
+  uint32_t mov_x0_8877 = 0b111100101 << 23;
+  mov_x0_8877 |= (0x8877 << 5);
+  mov_x0_8877 |= (3 << 21);
+
+  uint32_t ret = 0xD65F0000 | (30 << 5);;
 
   /// @brief LDP 
   uint32_t LDP_X29_X30 = 0b1010100011 << 22;
@@ -109,5 +136,16 @@ TEST(assembly_test, base_jit_call) {
   std::cout << std::hex << stp_x29_x30 << "-" << LDP_X29_X30 << std::endl;
   // ...call
   // ldp x29, x30, [sp], #16    <- 0xa8c17bfd
-  test();
+
+  // create JIT function
+   std::vector<uint8_t> assemblies;
+   addUint32_t(assemblies, stp_x29_x30);
+   addUint32_t(assemblies, mov_x0_2211);
+   addUint32_t(assemblies, mov_x0_4433);
+   addUint32_t(assemblies, mov_x0_6655);
+   addUint32_t(assemblies, mov_x0_8877);
+   addUint32_t(assemblies, LDP_X29_X30);
+   addUint32_t(assemblies, ret);
+   auto fun = createJit64(assemblies);
+   std::cout << "jit result = " << std::hex << fun() << std::endl;
  }
