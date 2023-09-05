@@ -13,13 +13,24 @@ int callAssembly(std::function<int()> fun){
 void test() {
   std::cout << "hello JIT\n";
 }
+int a;
+uint64_t testAsm(){
+  // asm("mov X0, #0x2211");
+  // asm("movk X0, #0x4433, lsl #0x10");
+  // asm("movk X0, #0x6655, lsl #0x20");
+  // asm("movk X0, #0x8877, lsl #0x30");
 
-uint64_t mov64_x0(){
-  asm("mov X0, #0x2211");
-  asm("movk X0, #0x4433, lsl #0x10");
-  asm("movk X0, #0x6655, lsl #0x20");
-  asm("movk X0, #0x8877, lsl #0x30");
+  // asm("str X1, [sp, #-8]!");
+  // asm("LDR X0, [sp], #8");
+  asm("mov x0, #0");
+  asm("mov X1, sp");
+  asm("str X1, [sp], #-16");
+  asm("ldr x0, [sp, #16]!");
+  // asm("add sp, sp, #8");
+  
   asm("ret");
+  // a = 10;
+  // return a;
 }
 
 TEST(assembly_test, base_lambda) {
@@ -50,7 +61,7 @@ std::function<void()> createJitVoid(const std::vector<uint8_t>& executable){
 
 
 
-/// @brief https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/MOV--wide-immediate---Move--wide-immediate---an-alias-of-MOVZ-?lang=en
+/// @p https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/MOV--wide-immediate---Move--wide-immediate---an-alias-of-MOVZ-?lang=en
 TEST(assembly_test, base_jit_mov) {
   /**
   32-bit variant
@@ -83,7 +94,7 @@ TEST(assembly_test, base_jit_mov) {
 
 TEST(assembly_test, base_jit_mov_8877665544332211) {
   // 函数栈帧的保存
-  /// @brief https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/STP--Store-Pair-of-Registers-
+  /// @p https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/STP--Store-Pair-of-Registers-
   // stp x29, x30, [sp, #-16]!  <- 0xa9bf7bfd
   uint32_t stp_x29_x30 = 0b101010011 << 23;
   stp_x29_x30 |= (0x2211 << 5);
@@ -115,7 +126,7 @@ TEST(assembly_test, base_jit_mov_8877665544332211) {
   /// @brief mov 0x8877665544332211 to X0
   uint32_t mov_x0_2211 = 0b10100101 << 23;
   mov_x0_2211 |= (0x2211 << 5);
-  /// MOVK Document: https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/MOVK--Move-wide-with-keep-?lang=en
+  ///@p https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/MOVK--Move-wide-with-keep-?lang=en
   uint32_t mov_x0_4433 = 0b111100101 << 23;
   mov_x0_4433 |= (0x4433 << 5);
   // hw移位定义
@@ -176,7 +187,7 @@ TEST(assembly_test, base_jit_mov_8877665544332211) {
     assemblies.push_back(code);
   }
 
-  /// @brief BLR: https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/BLR--Branch-with-Link-to-Register-?lang=en 
+  /// @p https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/BLR--Branch-with-Link-to-Register-?lang=en 
   uint32_t call_x1 = 0b1101011000111111000000 << 10;
   call_x1 |= (1 << 5); // register << 5
   addUint32_t(assemblies, call_x1);
@@ -193,3 +204,68 @@ TEST(assembly_test, base_jit_mov_8877665544332211) {
   auto fun = createJitVoid(assemblies);
   fun();
  }
+
+  TEST(assembly_test, base_jit_if_else) { 
+  std::vector<uint8_t> assemblies;
+
+  uint32_t stp_x29_x30 = 0b101010011 << 23;
+  stp_x29_x30 |= (0x2211 << 5);
+  stp_x29_x30 |= (((-16 / 8) & 0b1111111) << 15); // IMM7
+  stp_x29_x30 |= (30 << 10); // RT2
+  stp_x29_x30 |= (31 << 5); // RN sp = X31
+  stp_x29_x30 |= (29); // RT
+  addUint32_t(assemblies, stp_x29_x30);
+
+
+  /// function Body:{
+  
+  uint32_t value = 11;
+  
+  /// fake code:
+  // if(value > 10) {
+  //   print("value > 10");
+  // } else {
+  //   print("value <= 10");
+  // }
+
+  auto mov_value_x1 = insertPtrToRegister(0, (void*)(static_cast<uintptr_t>(value)));
+  for(auto code : mov_value_x1) {
+    assemblies.push_back(code);
+  }
+
+  /// @brief STR 
+  /// @p https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/STR--immediate---Store-Register--immediate--?lang=en
+  /// 这里使用POST Index, 改变栈顶元素后，栈顶寄存器移位
+  /// STR X1,  [SP], #-16
+  uint32_t str_X1_SP_sub_16 = 0b11111000000 << 21;
+  str_X1_SP_sub_16 |= (1<<10);
+  str_X1_SP_sub_16 |= 1; // X1
+  str_X1_SP_sub_16 |= (31 << 5); // sp
+  str_X1_SP_sub_16 |= ((-2 & 0b111111111 ) << 10); // , sp - 8
+  addUint32_t(assemblies, str_X1_SP_sub_16);
+
+  /// LDR x0, [SP,#16]!
+  /// LDR @p https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/LDR--immediate---Load-Register--immediate--?lang=en
+  uint32_t LDR_x0_sp_add_16 = 0b11111000010 << 21;
+  LDR_x0_sp_add_16 |= (1 << 10);
+  LDR_x0_sp_add_16 |= (31 << 5); // sp
+  LDR_x0_sp_add_16 |= (2 << 12); // , sp + 16
+  addUint32_t(assemblies, LDR_x0_sp_add_16);
+  /// }
+
+  uint32_t LDP_X29_X30 = 0b1010100011 << 22;
+  LDP_X29_X30 |= (((16 / 8) & 0b1111111) << 15); // IMM7
+  LDP_X29_X30 |= (30 << 10); // RT2
+  LDP_X29_X30 |= (31 << 5); // RN sp = X31
+  LDP_X29_X30 |= (29); // RT
+  uint32_t ret = 0xD65F0000 | (30 << 5);
+  addUint32_t(assemblies, LDP_X29_X30);
+  addUint32_t(assemblies, ret);
+
+  auto fun = createJit(assemblies);
+  uint32_t result = fun();
+  std::cout << "if else result = " << result << std::endl;
+  // uint64_t result2 = testAsm();
+  // std::cout << "asm result = " << std::hex << result2 << std::endl;
+
+  }
