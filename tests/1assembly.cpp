@@ -153,6 +153,9 @@ TEST(assembly_test, base_jit_mov_8877665544332211) {
    ASSERT_EQ(0x8877665544332211, fun());
  }
 
+  void helloJesse(){
+    std::cout << "hello Jesse\n";
+  }
 
  TEST(assembly_test, base_jit_call_native) { 
 
@@ -167,7 +170,7 @@ TEST(assembly_test, base_jit_mov_8877665544332211) {
   addUint32_t(assemblies, stp_x29_x30);
 
 
-  void* printFun = (void*) test;
+  void* printFun = (void*) helloJesse;
   auto functionToReg = insertPtrToRegister(1, printFun);
   for(auto code : functionToReg) {
     assemblies.push_back(code);
