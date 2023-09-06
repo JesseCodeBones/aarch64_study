@@ -4,6 +4,7 @@
 #include <sys/mman.h>
 #include <cstring>
 #include "../src/Assembly.hpp"
+#include "../src/AsmFunction.hpp"
 
 int callAssembly(std::function<int()> fun){
   return fun();
@@ -12,25 +13,6 @@ int callAssembly(std::function<int()> fun){
 
 void test() {
   std::cout << "hello JIT\n";
-}
-int a;
-uint64_t testAsm(){
-  // asm("mov X0, #0x2211");
-  // asm("movk X0, #0x4433, lsl #0x10");
-  // asm("movk X0, #0x6655, lsl #0x20");
-  // asm("movk X0, #0x8877, lsl #0x30");
-
-  // asm("str X1, [sp, #-8]!");
-  // asm("LDR X0, [sp], #8");
-  asm("mov x0, #0");
-  asm("mov X1, sp");
-  asm("str X1, [sp], #-16");
-  asm("ldr x0, [sp, #16]!");
-  // asm("add sp, sp, #8");
-  
-  asm("ret");
-  // a = 10;
-  // return a;
 }
 
 TEST(assembly_test, base_lambda) {
@@ -228,28 +210,34 @@ TEST(assembly_test, base_jit_mov_8877665544332211) {
   //   print("value <= 10");
   // }
 
-  auto mov_value_x1 = insertPtrToRegister(0, (void*)(static_cast<uintptr_t>(value)));
+  auto mov_value_x1 = insertPtrToRegister(1, (void*)(static_cast<uintptr_t>(value)));
   for(auto code : mov_value_x1) {
     assemblies.push_back(code);
   }
 
-  /// @brief STR 
+  /// @brief STR
   /// @p https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/STR--immediate---Store-Register--immediate--?lang=en
+  /// ARM64里面 对栈(sp)的操作(必须)是16字节对齐的
   /// 这里使用POST Index, 改变栈顶元素后，栈顶寄存器移位
   /// STR X1,  [SP], #-16
+  /// 0xf81f07e1
   uint32_t str_X1_SP_sub_16 = 0b11111000000 << 21;
-  str_X1_SP_sub_16 |= (1<<10);
+  str_X1_SP_sub_16 |= (0b1<<10);
   str_X1_SP_sub_16 |= 1; // X1
   str_X1_SP_sub_16 |= (31 << 5); // sp
-  str_X1_SP_sub_16 |= ((-2 & 0b111111111 ) << 10); // , sp - 8
+  str_X1_SP_sub_16 |= ((-16 & 0b111111111 ) << 12); // , sp - 16
   addUint32_t(assemblies, str_X1_SP_sub_16);
 
   /// LDR x0, [SP,#16]!
+  /// f8410fe0
+  /// ARM64里面 对栈(sp)的操作(必须)是16字节对齐的
   /// LDR @p https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/LDR--immediate---Load-Register--immediate--?lang=en
+  /// <simm>	不用除以8
+  ///   Is the signed immediate byte offset, in the range -256 to 255, encoded in the "imm9" field.
   uint32_t LDR_x0_sp_add_16 = 0b11111000010 << 21;
-  LDR_x0_sp_add_16 |= (1 << 10);
+  LDR_x0_sp_add_16 |= (0b11 << 10);
   LDR_x0_sp_add_16 |= (31 << 5); // sp
-  LDR_x0_sp_add_16 |= (2 << 12); // , sp + 16
+  LDR_x0_sp_add_16 |= (16 << 12); // , sp + 16
   addUint32_t(assemblies, LDR_x0_sp_add_16);
   /// }
 
@@ -262,10 +250,12 @@ TEST(assembly_test, base_jit_mov_8877665544332211) {
   addUint32_t(assemblies, LDP_X29_X30);
   addUint32_t(assemblies, ret);
 
+  std::cout << "code:" << std::hex << str_X1_SP_sub_16 << "-" << LDR_x0_sp_add_16 << std::endl;
+
   auto fun = createJit(assemblies);
   uint32_t result = fun();
-  std::cout << "if else result = " << result << std::endl;
-  // uint64_t result2 = testAsm();
-  // std::cout << "asm result = " << std::hex << result2 << std::endl;
+  std::cout << "if else result = " << std::dec << result << std::endl;
+  uint64_t result2 = testAsm();
+  std::cout << "asm result = " << std::hex << result2 << std::endl;
 
   }
