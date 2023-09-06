@@ -187,7 +187,7 @@ TEST(assembly_test, base_jit_mov_8877665544332211) {
   fun();
  }
 
-  TEST(assembly_test, base_jit_if_else) { 
+  TEST(assembly_test, base_jit_store_load) { 
   std::vector<uint8_t> assemblies;
 
   uint32_t stp_x29_x30 = 0b101010011 << 23;
@@ -250,12 +250,71 @@ TEST(assembly_test, base_jit_mov_8877665544332211) {
   addUint32_t(assemblies, LDP_X29_X30);
   addUint32_t(assemblies, ret);
 
-  std::cout << "code:" << std::hex << str_X1_SP_sub_16 << "-" << LDR_x0_sp_add_16 << std::endl;
+  auto fun = createJit(assemblies);
+  uint32_t result = fun();
+  }
+
+
+
+/**
+  if(value == 10) {
+    return 42;
+  } else {
+    return 33;
+  }
+
+*/
+
+TEST(assembly_test, base_jit_branch) { 
+
+  std::vector<uint8_t> assemblies;
+  int value = 10;
+  uint32_t ret = 0xD65F0000 | (30 << 5);
+
+  auto mov_value_x9 = insertPtrToRegister(9, (void*)(static_cast<uintptr_t>(value)));
+  for(auto code : mov_value_x9) {
+    assemblies.push_back(code);
+  }
+
+  auto mov_value_x10 = insertPtrToRegister(10, (void*)(static_cast<uintptr_t>(10)));
+  for(auto code : mov_value_x10) {
+    assemblies.push_back(code);
+  }
+
+  uint32_t mov42 = 0b10100101 << 23;
+  mov42 |= (0b101010 << 5);
+  addUint32_t(assemblies, mov42);
+
+  /// ARMv8也在硬件层面引入了一个新的zero register(XZR/WZR)，效果和软件层面的"/dev/zero"类似，作为源寄存器产生0，作为目标寄存器丢弃传入的数据。
+  /// CMP X9, X10
+  /// IMM9 = offset / 4 
+  /// @p https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/CMP--extended-register---Compare--extended-register---an-alias-of-SUBS--extended-register--?lang=en
+  uint32_t cmp_x9_x10 = 0b11101011 << 24;
+  cmp_x9_x10 |= 0b11111;
+  cmp_x9_x10 |= (9 << 5);
+  cmp_x9_x10 |= (10 << 16);
+  addUint32_t(assemblies, cmp_x9_x10);
+
+  /// B.EQ [pc, 3*4]
+  /// @p https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/B-cond--Branch-conditionally-?lang=en
+  /// 关于B.Cond中condition值的表格，参照../doc/compare_table.png
+  /// 这里的condition是EQ, 通过表格可知是0b0000, 不加入任何cond值
+  uint32_t b_eq = 0b01010100 << 24;
+  b_eq |= (3 << 5); // offset / 4, want to skip 2 instruction, 1+2 = 3
+  addUint32_t(assemblies, b_eq);
+
+  uint32_t mov24 = 0b10100101 << 23;
+  mov24 |= (24 << 5);
+  addUint32_t(assemblies, mov24);
+
+  uint32_t mov33 = 0b10100101 << 23;
+  mov33 |= (33 << 5);
+  addUint32_t(assemblies, mov33);
+  
+  addUint32_t(assemblies, ret);
 
   auto fun = createJit(assemblies);
   uint32_t result = fun();
-  std::cout << "if else result = " << std::dec << result << std::endl;
-  uint64_t result2 = testAsm();
-  std::cout << "asm result = " << std::hex << result2 << std::endl;
-
-  }
+  ASSERT_EQ(42, result);
+}
+  
