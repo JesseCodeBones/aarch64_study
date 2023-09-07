@@ -341,12 +341,11 @@ TEST(assembly_test, base_jit_loop) {
   addAssemblyToExecutable(executable, insertUint64ToRegister(10, static_cast<uint64_t>(b)));
   addAssemblyToExecutable(executable, insertUint64ToRegister(11, static_cast<uint64_t>(42)));
   addAssemblyToExecutable(executable, cmpTwoRigister(9, 11));
-  addAssemblyToExecutable(executable, b_GE(5));
+  addAssemblyToExecutable(executable, b_GE(4));
   addAssemblyToExecutable(executable, add_register_imm(9, 9, 1));
   addAssemblyToExecutable(executable, add_register_register(10, 10, 9));
-  addAssemblyToExecutable(executable, cmpTwoRigister(9, 11));
   // 在ARMv8-A架构中，条件比较的结果不会消耗，也不会被清空，因为条件比较的结果是保存在处理器的标志寄存器中的。
-  addAssemblyToExecutable(executable, b_LE(-4)); // b(0) 执行当前，要跳到 b_GE(5), 上面数四个指令
+  addAssemblyToExecutable(executable, b_LE(-4)); // b(0) 执行当前，要跳到 cmpTwoRigister(9, 11), 上面数四个指令
   addAssemblyToExecutable(executable, mov_register_register(0, 10));
   addAssemblyToExecutable(executable, loadX29X30());
   addAssemblyToExecutable(executable, ret());
