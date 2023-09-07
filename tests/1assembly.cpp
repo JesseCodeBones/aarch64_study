@@ -317,4 +317,41 @@ TEST(assembly_test, base_jit_branch) {
   uint32_t result = fun();
   ASSERT_EQ(42, result);
 }
+
+
+/// fake code
+/**
+  int a = 0;
+  int b = 0;
+  while (a<42) {
+     b = b + a;
+  }
+  return b;
+*/
+
+TEST(assembly_test, base_jit_loop) { 
+
+  std::vector<uint8_t> executable;
+  int a = 0;
+  int b = 0;
+
+  addAssemblyToExecutable(executable, storeX29X30());
+  addAssemblyToExecutable(executable, insertUint64ToRegister(0, static_cast<uint64_t>(42)));
+  addAssemblyToExecutable(executable, insertUint64ToRegister(9, static_cast<uint64_t>(a)));
+  addAssemblyToExecutable(executable, insertUint64ToRegister(10, static_cast<uint64_t>(b)));
+  addAssemblyToExecutable(executable, insertUint64ToRegister(11, static_cast<uint64_t>(42)));
+  addAssemblyToExecutable(executable, cmpTwoRigister(9, 11));
+  addAssemblyToExecutable(executable, b_GE(5));
+  addAssemblyToExecutable(executable, add_register_imm(9, 9, 1));
+  addAssemblyToExecutable(executable, add_register_register(10, 10, 9));
+  addAssemblyToExecutable(executable, cmpTwoRigister(9, 11));
+  addAssemblyToExecutable(executable, b_LE(-4));
+  addAssemblyToExecutable(executable, mov_register_register(0, 10));
+  addAssemblyToExecutable(executable, loadX29X30());
+  addAssemblyToExecutable(executable, ret());
+
+  auto fun = createJit(executable);
+  uint32_t result = fun();
+  ASSERT_EQ(903, result);
+}
   

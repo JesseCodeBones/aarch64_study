@@ -21,7 +21,10 @@ extern "C" {
   }
 
   static int testReturn42(){
-    asm("mov x0, #42");
+    asm("mov x10, #21");
+    asm("mov x9, #21");
+    asm("add x10, x10, x9");
+    asm("mov x0, x10");
     asm("ret");
   }
 
